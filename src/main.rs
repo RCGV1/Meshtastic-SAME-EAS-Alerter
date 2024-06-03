@@ -1,16 +1,18 @@
-use std::env;
-use sameold::{Message, SameReceiverBuilder};
+use std::{ env};
+use sameold::{Message, SameReceiverBuilder, SignificanceLevel};
 use std::io::{self};
 use std::process::{exit};
 use anyhow::{Result};
 use byteorder::{ReadBytesExt, NativeEndian};
+use chrono::Utc;
 use meshtastic::packet::PacketRouter;
 use meshtastic::protobufs::{FromRadio, MeshPacket};
-use meshtastic::types::NodeId;
+use meshtastic::types::{MeshChannel, NodeId};
 use log::debug;
 use meshtastic::api::StreamApi;
+use meshtastic::packet::PacketDestination::Broadcast;
 use meshtastic::utils;
-use strum::Display;
+use strum::{Display, EnumMessage};
 use thiserror::Error;
 
 
@@ -20,7 +22,10 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
 
-    let argument = &args[1];
+    let argument = match args.get(1) {
+        Some(arg) => arg,
+        None => panic!("Expected an argument of either \"ports\" or a port to connect to for Meshtastic"),
+    };
 
     //Ports Checker
     if argument.eq_ignore_ascii_case("ports"){
@@ -38,9 +43,9 @@ async fn main() -> Result<()> {
 
 
     let config_id = utils::generate_rand_id();
+    let mut packet_router = MyPacketRouter::new(0);
     let mut meshtastic_stream = stream_api.configure(config_id).await?;
 
-    let mut packet_router = MyPacketRouter::new(0);
 
     // Create a SameReceiver with a 4800 Hz audio sampling rate
     let mut rx = SameReceiverBuilder::new(48000)
@@ -58,21 +63,57 @@ async fn main() -> Result<()> {
     // Create an iterator for audio source from stdin, reading i16 and converting to f32
     let audiosrc = std::iter::from_fn(|| Some(inbuf.read_i16::<NativeEndian>().ok()?));
 
-    println!("RUNNING");
+    println!("-- Listening --");
     // Process messages from the audio source
     for msg in rx.iter_messages(audiosrc.map(|sa| sa as f32)) {
         match msg {
             Message::StartOfMessage(hdr) => {
                 println!("Begin SAME voice message: {:?}", hdr);
                 let evt = hdr.event();
+                let mut message:String;
+                let mut channel:MeshChannel = 0.into();
 
+                    message = " Issued By: ".to_string() + hdr.originator().get_detailed_message().unwrap() + " " + &*hdr.issue_datetime(&Utc::now()).expect("test").time().to_string();
+                    match evt.significance(){
+                        SignificanceLevel::Test => {
+                            message = "📖 Received ".to_string() + &evt.to_string() + " from " + hdr.callsign() + &*message;
+                            channel = 1.into();
+                        }
+                        SignificanceLevel::Statement => {
+                            message = "📟".to_string() + &evt.to_string() + &*message;
+                        }
+                        SignificanceLevel::Emergency => {
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                        }
+                        SignificanceLevel::Watch => {
+                            message = "⚠️ ".to_string() + &evt.to_string() + &*message;
+                        }
+                        SignificanceLevel::Warning => {
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                        }
+                        SignificanceLevel::Unknown => {
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                        }
+                        _ => {
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                        }
 
+                    }
+
+                if let Err(e) = meshtastic_stream
+                    .send_text(&mut packet_router, message, Broadcast, true, channel)
+                    .await
+                {
+                    println!("Error sending message: {}", e);
+                }
             }
             Message::EndOfMessage => {
                 println!("End SAME voice message");
             }
         }
     }
+    println!("-- Program Stopped --");
+
 
     Ok(())
 }
