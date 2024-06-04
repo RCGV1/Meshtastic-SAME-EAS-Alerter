@@ -80,22 +80,22 @@ async fn main() -> Result<()> {
                             channel = 1.into();
                         }
                         SignificanceLevel::Statement => {
-                            message = "📟".to_string() + &evt.to_string() + &*message;
+                            message = "📟".to_string() + &evt.to_string() + &*message  + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
                         SignificanceLevel::Emergency => {
-                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message  + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
                         SignificanceLevel::Watch => {
-                            message = "⚠️ ".to_string() + &evt.to_string() + &*message;
+                            message = "⚠️ ".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
                         SignificanceLevel::Warning => {
-                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
                         SignificanceLevel::Unknown => {
-                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
                         _ => {
-                            message = "🚨 ".to_string() + &evt.to_string() + &*message;
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
 
                     }

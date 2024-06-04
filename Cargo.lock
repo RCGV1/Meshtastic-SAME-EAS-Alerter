@@ -7,6 +7,7 @@ name = "Meshtastic-SAME-EAS-Alerter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ascii",
  "byteorder",
  "chrono",
  "log",
@@ -82,6 +83,12 @@ name = "arrayvec"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
+
+[[package]]
+name = "ascii"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d92bec98840b8f03a5ff5413de5293bfcd8bf96467cf5452609f939ec6f5de16"
 
 [[package]]
 name = "assert_approx_eq"
