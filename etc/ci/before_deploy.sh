@@ -23,7 +23,7 @@ pack() {
     fi
 
     # create a "staging" directory
-    mkdir "$tempdir/$package_name"
+    mkdir -p "$tempdir/$package_name"
 
     # copying the main binary
     cp "target/$TARGET/release/$PROJECT_NAME" "$tempdir/$package_name/"
