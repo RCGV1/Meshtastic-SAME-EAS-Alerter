@@ -26,14 +26,14 @@ pack() {
     mkdir -p "$tempdir/$package_name"
 
     # copying the main binary
-    cp "target/$TARGET/release/$PROJECT_NAME" "$tempdir/$package_name/"
+    cp -n "target/$TARGET/release/$PROJECT_NAME" "$tempdir/$package_name/"
     if [ "$OS_NAME" != windows-latest ]; then
         "${gcc_prefix}"strip "$tempdir/$package_name/$PROJECT_NAME"
     fi
 
     # manpage, readme and license
-    cp README.md "$tempdir/$package_name"
-    cp LICENSE "$tempdir/$package_name"
+    cp -n README.md "$tempdir/$package_name"
+    cp -n LICENSE "$tempdir/$package_name"
 
     # archiving
     pushd "$tempdir"
