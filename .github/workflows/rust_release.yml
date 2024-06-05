@@ -1,0 +1,343 @@
+name: Release
+
+on:
+push:
+branches: [ "master" ]
+tags: [ "Meshtastic-SAME-EAS-ALERTER-*" ]
+
+permissions:
+contents: write
+
+env:
+CARGO_TERM_COLOR: always
+RUST_BACKTRACE: 1
+
+jobs:
+# run `cargo vendor` and cache it
+vendor_sources:
+runs-on: ubuntu-latest
+
+steps:
+  - uses: actions/checkout@v3
+
+  - uses: actions/cache@v3
+name: Update crate cargo-vendor cache
+id: vendor_cache
+with:
+path: |
+  .cargo
+  vendor
+key: cargo-vendor-release-${{ hashFiles('**/Cargo.lock') }}
+restore-keys: |
+  cargo-vendor-release
+  cargo-vendor
+enableCrossOsArchive: true
+
+  - uses: actions/cache@v3
+name: Update cargo registry cache
+if: steps.vendor_cache.outputs.cache-hit != 'true'
+with:
+path: |
+  ~/.cargo/bin/
+  ~/.cargo/registry/index/
+  ~/.cargo/registry/cache/
+  ~/.cargo/git/db/
+key: ${{ runner.os }}-cargo-cache-release-${{ hashFiles('**/Cargo.lock') }}
+restore-keys: |
+  ${{ runner.os }}-cargo-cache-release
+  ${{ runner.os }}-cargo-cache
+
+- name: Vendor sources
+if: steps.vendor_cache.outputs.cache-hit != 'true'
+run: |
+  mkdir -p .cargo
+  mkdir -p vendor
+  cargo vendor --versioned-dirs --locked >.cargo/config.toml
+
+# Linux builds, with Docker and qemu as required
+release_linux:
+runs-on: ubuntu-latest
+
+needs: vendor_sources
+
+# qemu cross-compiling is very slow
+timeout-minutes: 60
+
+env:
+# See <https://hub.docker.com/_/rust> for list of tags
+BUILD_RUST_TAG: 1.70.0
+BUILD_OS_GNU: slim-buster
+BUILD_OS_MUSL: alpine
+CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+strategy:
+matrix:
+include:
+  - docker: linux/amd64
+os: slim-buster
+rust: x86_64-unknown-linux-gnu
+
+  - docker: linux/amd64
+os: alpine
+rust: x86_64-unknown-linux-musl
+
+  - docker: linux/arm64
+os: slim-buster
+rust: aarch64-unknown-linux-gnu
+
+  - docker: linux/arm64
+os: alpine
+rust: aarch64-unknown-linux-musl
+
+  - docker: linux/arm/v7
+os: slim-buster
+rust: armv7-unknown-linux-gnueabihf
+
+steps:
+  - uses: actions/checkout@v3
+
+  - uses: actions/cache/restore@v3
+name: Restore crate cargo-vendor cache
+with:
+path: |
+  .cargo
+  vendor
+key: cargo-vendor-release-${{ hashFiles('**/Cargo.lock') }}
+enableCrossOsArchive: true
+fail-on-cache-miss: true
+
+  - name: Set swap space
+uses: pierotofy/set-swap-space@v1.0
+with:
+swap-size-gb: 10
+
+  - name: Set up QEMU
+uses: docker/setup-qemu-action@v3
+with:
+platforms: all
+
+  - name: Set up Docker Buildx
+uses: docker/setup-buildx-action@v3
+
+  - name: Prepare output directory
+run: |
+  mkdir -m 700 -p "install/bin"
+
+# Builds a special target in our Dockerfile which builds
+# an empty image containing only our Rust binary. This task
+# exports the file to
+# install/bin/samedec-x86_64-unknown-linux-gnu
+# and the like.
+- name: Build
+uses: docker/build-push-action@v5
+with:
+context: .
+push: false
+load: false
+cache-from: type=gha,scope=${{ matrix.os }}_${{ matrix.rust }}
+cache-to: type=gha,mode=max,scope=${{ matrix.os }}_${{ matrix.rust }}
+tags: samedec:latest
+target: localfile
+build-args: |
+  CARGO_BUILD_TARGET=${{ matrix.rust }}
+  CARGO_NET_OFFLINE=true
+  BUILD_OS_TAG=${{ matrix.os }}
+  BUILD_RUST_TAG=${{ env.BUILD_RUST_TAG }}
+platforms: ${{ matrix.docker }}
+outputs: "type=local,dest=install/bin"
+
+  - name: Copy artifact
+run: |
+  cp install/bin/samedec install/bin/samedec-${{ matrix.rust }}
+
+- name: Store artifact
+uses: actions/upload-artifact@v3
+with:
+name: samedec-${{ matrix.rust }}
+path: install/bin/samedec-${{ matrix.rust }}
+retention-days: 3
+
+  - name: Upload tagged release
+uses: svenstaro/upload-release-action@v2
+if: startsWith(github.ref, 'refs/tags/samedec-')
+with:
+repo_token: ${{ secrets.GITHUB_TOKEN }}
+file: install/bin/samedec-${{ matrix.rust }}
+overwrite: true
+
+  - name: Update tag for nightly release
+uses: richardsimko/update-tag@v1
+if: github.ref == 'refs/heads/develop'
+with:
+tag_name: latest
+env:
+GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  - name: Upload nightly release
+uses: svenstaro/upload-release-action@v2
+if: github.ref == 'refs/heads/develop'
+with:
+tag: "latest"
+release_name: "Nightly Release"
+body: "This is a rolling release built from the latest `develop` branch."
+prerelease: true
+file: install/bin/samedec-${{ matrix.rust }}
+overwrite: true
+
+# Win32 build, on whatever machine github has available
+release_windows:
+runs-on: windows-latest
+
+needs: vendor_sources
+
+env:
+CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+CARGO_NET_OFFLINE: "true"
+CARGO_INSTALL_ROOT: "install/"
+RUSTFLAGS: '-C strip=symbols -C target-feature=+crt-static'
+samedec_exe: 'install/bin/samedec.exe'
+samedec_target_exe: install/bin/samedec-x86_64-pc-windows-msvc.exe
+
+steps:
+  - uses: actions/checkout@v3
+
+  - name: Record environment
+shell: bash
+run: cargo version
+
+  - uses: actions/cache/restore@v3
+name: Restore crate cargo-vendor cache
+with:
+path: |
+  .cargo
+  vendor
+key: cargo-vendor-release-${{ hashFiles('**/Cargo.lock') }}
+enableCrossOsArchive: true
+fail-on-cache-miss: true
+
+  - name: Build
+shell: bash
+run: |
+  mkdir -p 'install' &&
+  cargo build --offline --tests --frozen --release --workspace
+
+- name: Test and install
+shell: bash
+run: |
+  cargo test --offline --frozen --release --workspace &&
+  cargo install --offline --frozen --path=crates/samedec
+
+- name: Run integration tests
+shell: bash
+run: |
+  pushd sample &&
+  ./test.sh &&
+  popd
+
+- name: Copy artifact
+shell: bash
+run: |
+  cp "$samedec_exe" "$samedec_target_exe"
+
+- name: Store artifact
+uses: actions/upload-artifact@v3
+with:
+name: samedec-${{ env.CARGO_BUILD_TARGET }}
+path: ${{ env.samedec_target_exe }}
+retention-days: 3
+
+  - name: Upload tagged release
+uses: svenstaro/upload-release-action@v2
+if: startsWith(github.ref, 'refs/tags/samedec-')
+with:
+repo_token: ${{ secrets.GITHUB_TOKEN }}
+file: ${{ env.samedec_target_exe }}
+overwrite: true
+
+  - name: Upload nightly release
+uses: svenstaro/upload-release-action@v2
+if: github.ref == 'refs/heads/develop'
+with:
+tag: "latest"
+release_name: "Nightly Release"
+body: "This is a rolling release built from the latest `develop` branch."
+prerelease: true
+file: ${{ env.samedec_target_exe }}
+overwrite: true
+
+# MacOS build, on whatever machine github has available
+release_macos:
+runs-on: macos-latest
+
+needs: vendor_sources
+
+env:
+CARGO_BUILD_TARGET: x86_64-apple-darwin
+CARGO_NET_OFFLINE: "true"
+CARGO_INSTALL_ROOT: "install/"
+RUSTFLAGS: '-C strip=symbols'
+samedec_exe: 'install/bin/samedec'
+samedec_target_exe: install/bin/samedec-x86_64-apple-darwin
+
+steps:
+  - uses: actions/checkout@v3
+
+  - name: Record environment
+run: cargo version
+
+  - uses: actions/cache/restore@v3
+name: Restore crate cargo-vendor cache
+with:
+path: |
+  .cargo
+  vendor
+key: cargo-vendor-release-${{ hashFiles('**/Cargo.lock') }}
+enableCrossOsArchive: true
+fail-on-cache-miss: true
+
+  - name: Build
+run: |
+  mkdir -p 'install' &&
+  cargo fetch --locked &&
+  cargo build --offline --tests --frozen --release --workspace
+
+- name: Test and install
+run: |
+  cargo test --offline --frozen --release --workspace &&
+  cargo install --offline --frozen --path=crates/samedec
+
+- name: Run integration tests
+run: |
+  pushd sample &&
+  ./test.sh &&
+  popd
+
+- name: Copy artifact
+run: |
+  cp "$samedec_exe" "$samedec_target_exe"
+
+- name: Store artifact
+uses: actions/upload-artifact@v3
+with:
+name: samedec-${{ env.CARGO_BUILD_TARGET }}
+path: ${{ env.samedec_target_exe }}
+retention-days: 3
+
+  - name: Upload tagged release
+uses: svenstaro/upload-release-action@v2
+if: startsWith(github.ref, 'refs/tags/samedec-')
+with:
+repo_token: ${{ secrets.GITHUB_TOKEN }}
+file: ${{ env.samedec_target_exe }}
+overwrite: true
+
+  - name: Upload nightly release
+uses: svenstaro/upload-release-action@v2
+if: github.ref == 'refs/heads/develop'
+with:
+tag: "latest"
+release_name: "Nightly Release"
+body: "This is a rolling release built from the latest `develop` branch."
+prerelease: true
+file: ${{ env.samedec_target_exe }}
+overwrite: true
