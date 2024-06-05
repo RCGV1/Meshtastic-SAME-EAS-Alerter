@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
                 let mut message:String;
                 let mut channel:MeshChannel = 0.into();
 
-                    message = " Issued By: ".to_string() + hdr.originator().get_detailed_message().unwrap() + " " + &*hdr.issue_datetime(&Utc::now()).expect("test").time().to_string();
+                    message = " Issued By: ".to_string() + hdr.originator().get_detailed_message().unwrap();
                     match evt.significance(){
                         SignificanceLevel::Test => {
                             message = "📖 Received ".to_string() + &evt.to_string() + " from " + hdr.callsign() + &*message;
