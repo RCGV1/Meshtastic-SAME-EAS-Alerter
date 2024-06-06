@@ -21,18 +21,15 @@ use thiserror::Error;
 async fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
+    //Ports Checker
+    let available_ports = utils::stream::available_serial_ports()?;
 
     let argument = match args.get(1) {
         Some(arg) => arg,
-        None => panic!("Expected an argument of either \"ports\" or a port to connect to for Meshtastic"),
+        None => panic!("Available ports: {:?}", available_ports),
     };
 
-    //Ports Checker
-    if argument.eq_ignore_ascii_case("ports"){
-        let available_ports = utils::stream::available_serial_ports()?;
-        println!("Available ports: {:?}", available_ports);
-        exit(0);
-    }
+
 
     let stream_api = StreamApi::new();
 
