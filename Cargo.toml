@@ -14,3 +14,5 @@ log = "0.4.21"
 thiserror = "1.0.61"
 strum = { version = "0.26.2", features = ["derive", "strum_macros"] }
 ascii = "1.1.0"
+clap = { version = "4.5.5", features = ["derive"] }
+atty = "0.2.14"

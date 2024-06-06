@@ -14,73 +14,88 @@ use meshtastic::packet::PacketDestination::Broadcast;
 use meshtastic::utils;
 use strum::{Display, EnumMessage};
 use thiserror::Error;
+use clap::{ArgGroup, Parser};
+#[derive(Parser, Debug)]
+#[command(long_about = None)]
+#[command(group(ArgGroup::new("operation").required(true).args(&["port", "ports"])))]
+struct Args {
+    // Port of Meshtastic device to connect to
+    #[arg(short, long)]
+    port: Option<String>,
 
+    // Flag to print all open ports
+    #[arg(long)]
+    ports: bool,
+}
 
-#[allow(unused)]
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Parse the command line arguments
+    let args = Args::parse();
 
-    let args: Vec<String> = env::args().collect();
-    //Ports Checker
-    let available_ports = utils::stream::available_serial_ports()?;
+    // Check if the --ports flag is set
+    if args.ports {
+        let available_ports = utils::stream::available_serial_ports()?;
+        println!("Available ports: {:?}", available_ports);
+        return Ok(());
+    }
 
-    let argument = match args.get(1) {
-        Some(arg) => arg,
-        None => panic!("Available ports: {:?}", available_ports),
-    };
-
-
-
-    let stream_api = StreamApi::new();
-
-    let entered_port = argument;
-    let serial_stream = utils::stream::build_serial_stream(entered_port.clone(), None, None, None)?;
-    let (mut decoded_listener, stream_api) = stream_api.connect(serial_stream).await;
-    println!("Connected to port: {}", entered_port);
+    if let Some(port) = args.port {
+        let stream_api = StreamApi::new();
 
 
-    let config_id = utils::generate_rand_id();
-    let mut packet_router = MyPacketRouter::new(0);
-    let mut meshtastic_stream = stream_api.configure(config_id).await?;
+        let serial_stream = utils::stream::build_serial_stream(port.clone(), None, None, None)?;
+        let (mut decoded_listener, stream_api) = stream_api.connect(serial_stream).await;
+        println!("Connected to port: {}", port);
 
 
-    // Create a SameReceiver with a 4800 Hz audio sampling rate
-    let mut rx = SameReceiverBuilder::new(48000)
-        .with_agc_gain_limits(1.0f32 / (i16::MAX as f32), 1.0 / 200.0)
-        .with_agc_bandwidth(0.05)          // AGC bandwidth at symbol rate, < 1.0
-        .with_squelch_power(0.10, 0.05)    // squelch open/close power, 0.0 < power < 1.0
-        .with_preamble_max_errors(2)       // bit error limit when detecting sync sequence
-        .build();
+        let config_id = utils::generate_rand_id();
+        let mut packet_router = MyPacketRouter::new(0);
+        let mut meshtastic_stream = stream_api.configure(config_id).await?;
 
-    // Set up stdin as the input source
-    let stdin = io::stdin();
-    let stdin_handle = stdin.lock();
-    let mut inbuf = Box::new(io::BufReader::new(stdin_handle));
 
-    // Create an iterator for audio source from stdin, reading i16 and converting to f32
-    let audiosrc = std::iter::from_fn(|| Some(inbuf.read_i16::<NativeEndian>().ok()?));
+        // Create a SameReceiver with a 4800 Hz audio sampling rate
+        let mut rx = SameReceiverBuilder::new(48000)
+            .with_agc_gain_limits(1.0f32 / (i16::MAX as f32), 1.0 / 200.0)
+            .with_agc_bandwidth(0.05)          // AGC bandwidth at symbol rate, < 1.0
+            .with_squelch_power(0.10, 0.05)    // squelch open/close power, 0.0 < power < 1.0
+            .with_preamble_max_errors(2)       // bit error limit when detecting sync sequence
+            .build();
 
-    println!("-- Listening --");
-    // Process messages from the audio source
-    for msg in rx.iter_messages(audiosrc.map(|sa| sa as f32)) {
-        match msg {
-            Message::StartOfMessage(hdr) => {
-                println!("Begin SAME voice message: {:?}", hdr);
-                let evt = hdr.event();
-                let mut message:String;
-                let mut channel:MeshChannel = 0.into();
+        // Set up stdin as the input source
+        let stdin = io::stdin();
+        // Check if there is any input from stdin
+        if atty::is(atty::Stream::Stdin) {
+            eprintln!("Error: No input provided to stdin. Please provide RTL FM input.");
+            std::process::exit(1);
+        }
+        let stdin_handle = stdin.lock();
+        let mut inbuf = Box::new(io::BufReader::new(stdin_handle));
+
+        // Create an iterator for audio source from stdin, reading i16 and converting to f32
+        let audiosrc = std::iter::from_fn(|| Some(inbuf.read_i16::<NativeEndian>().ok()?));
+
+        println!("-- Listening --");
+        // Process messages from the audio source
+        for msg in rx.iter_messages(audiosrc.map(|sa| sa as f32)) {
+            match msg {
+                Message::StartOfMessage(hdr) => {
+                    println!("Begin SAME voice message: {:?}", hdr);
+                    let evt = hdr.event();
+                    let mut message: String;
+                    let mut channel: MeshChannel = 0.into();
 
                     message = " Issued By: ".to_string() + hdr.originator().get_detailed_message().unwrap();
-                    match evt.significance(){
+                    match evt.significance() {
                         SignificanceLevel::Test => {
                             message = "📖 Received ".to_string() + &evt.to_string() + " from " + hdr.callsign() + &*message;
                             channel = 1.into();
                         }
                         SignificanceLevel::Statement => {
-                            message = "📟".to_string() + &evt.to_string() + &*message  + " " + &*ascii::AsciiChar::Bell.to_string();
+                            message = "📟".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
                         SignificanceLevel::Emergency => {
-                            message = "🚨 ".to_string() + &evt.to_string() + &*message  + " " + &*ascii::AsciiChar::Bell.to_string();
+                            message = "🚨 ".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
                         SignificanceLevel::Watch => {
                             message = "⚠️ ".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
@@ -94,23 +109,22 @@ async fn main() -> Result<()> {
                         _ => {
                             message = "🚨 ".to_string() + &evt.to_string() + &*message + " " + &*ascii::AsciiChar::Bell.to_string();
                         }
-
                     }
 
-                if let Err(e) = meshtastic_stream
-                    .send_text(&mut packet_router, message, Broadcast, true, channel)
-                    .await
-                {
-                    println!("Error sending message: {}", e);
+                    if let Err(e) = meshtastic_stream
+                        .send_text(&mut packet_router, message, Broadcast, true, channel)
+                        .await
+                    {
+                        println!("Error sending message: {}", e);
+                    }
+                }
+                Message::EndOfMessage => {
+                    println!("End SAME voice message");
                 }
             }
-            Message::EndOfMessage => {
-                println!("End SAME voice message");
-            }
         }
+        println!("-- Program Stopped --");
     }
-    println!("-- Program Stopped --");
-
 
     Ok(())
 }
