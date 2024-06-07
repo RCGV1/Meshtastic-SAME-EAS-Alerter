@@ -1,11 +1,5 @@
 # Meshtastic SAME EAS Alerter
 
-<style>
-    .image-container {
-        display: inline-block;
-        margin-right: 20px; /* Adjust the margin as needed */
-    }
-</style>
 
 <a href="https://www.weather.gov/" class="image-container">
     <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/ff/US-NationalWeatherService-Logo.svg/2048px-US-NationalWeatherService-Logo.svg.png" width=100>
