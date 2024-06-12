@@ -26,7 +26,7 @@ COMING SOON
 - For a detailed installation guide of rtl_fm check out the Installation instructions
 - Set the desired frequency to the nearest National Weather Service radio station typically in the 162.40 to 162.55 MHz range
 ```
-rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 - | Meshtastic-SAME-EAS-Alerter
+rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter
 ```
 
 ### ports
@@ -46,5 +46,5 @@ Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE>
 ### Full example
 You need both a Meshtastic serial port passed as an arg and rtl fm to run this
 ````
-rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 - | Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE>
+rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE>
 ````

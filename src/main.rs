@@ -1,4 +1,3 @@
-use std::{ env};
 use sameold::{Message, SameReceiverBuilder, SignificanceLevel};
 use std::io::{self};
 use std::process::{exit};
@@ -45,7 +44,7 @@ async fn main() -> Result<()> {
 
 
         let serial_stream = utils::stream::build_serial_stream(port.clone(), None, None, None)?;
-        let (mut decoded_listener, stream_api) = stream_api.connect(serial_stream).await;
+        let (decoded_listener, stream_api) = stream_api.connect(serial_stream).await;
         println!("Connected to port: {}", port);
 
 
