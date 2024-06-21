@@ -17,7 +17,31 @@ The Meshtastic SAME EAS Alerter is a lightweight tool designed to forward warnin
 
 
 ## 💿 Installation
-COMING SOON
+Installation example for Raspbian
+1. Install rtl_fm.  
+   follow these [instructions](https://fuzzthepiguy.tech/rtl_fm-install/)
+
+2. Install Meshtastic-SAME-EAS-Alerter
+````
+# Download the updated .deb file
+wget https://github.com/RCGV1/Meshtastic-SAME-EAS-Alerter/releases/download/v<VERSION_NUMBER_HERE>/Meshtastic-SAME-EAS-Alerter_<VERSION_NUMBER_HERE>_arm64.deb
+
+# Install the .deb package
+sudo dpkg -i Meshtastic-SAME-EAS-Alerter_<VERSION_NUMBER_HERE>_arm64.deb
+
+# Fix any dependency issues
+sudo apt-get install -f
+````
+
+Other operating systems may have a different installation
+
+
+## Meshtastic Setup 📻
+- All alerts will be sent to the primary channel (channel number 0)       
+- Set a secondary channel (channel 1) to be the logger channel, either by creating a different name for it or some sort of encryption   
+  - All test alerts will be sent to channel 1 so be sure to configure it   
+- The connected node should have a great line of sight of other nodes to effectively relay alerts  
+
 
 ## 🖋️ Usage
 
