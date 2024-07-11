@@ -15,6 +15,7 @@
 
 The Meshtastic SAME EAS Alerter is a lightweight tool designed to forward warnings, emergencies, or statements sent over the air to a local Meshtastic network. It operates without needing a WiFi connection. The setup involves connecting the hosting computer to an RTL SDR via USB and to a running Meshtastic node via serial.
 
+![Flood Example](./images/Flood.jpg)
 
 ## 💿 Installation
 Installation example for Raspbian
@@ -36,7 +37,7 @@ sudo apt-get install -f
 Other operating systems may have a different installation
 
 
-## Meshtastic Setup 📻
+## 📻 Meshtastic Setup
 - All alerts will be sent to the primary channel (channel number 0)       
 - Set a secondary channel (channel 1) to be the logger channel, either by creating a different name for it or some sort of encryption   
   - All test alerts will be sent to channel 1 so be sure to configure it   
@@ -56,19 +57,46 @@ rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter
 ### ports
 - Find all available serial ports
 - Find the port your Meshtastic node is connected to
-
 ```
 Meshtastic-SAME-EAS-Alerter --ports
 ```
 
 ### port
-
 ```
 Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE>
 ```
 
+## alert channel  
+- Input the channel number that alerts will be sent to  
+- By default, (if nothing is provided) alerts will be sent to channel number 0  
+```
+Meshtastic-SAME-EAS-Alerter --alert-channel <CHANNEL_NUMBER_HERE>
+```
+
+## test channel  
+- Input the channel number that test messages will be sent to  
+  - Usually test messages are transmitted weekly from the weather service station  
+  - These messages can help you tell if your system is working but they can be annoying as they happen often  
+- By default, (if nothing is provided) test messages will be ignored  
+```
+Meshtastic-SAME-EAS-Alerter --test-channel <CHANNEL_NUMBER_HERE>
+```
+
 ### Full example
-You need both a Meshtastic serial port passed as an arg and rtl fm to run this
+- You need both a Meshtastic serial port passed as an arg and rtl fm to run this
+- Alert channel and test channel are optional (see above)
 ````
-rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE>
+rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE> --alert-channel <CHANNEL_NUMBER_HERE> --test-channel <CHANNEL_NUMBER_HERE>
 ````
+
+# 📓 TODO
+PRs are welcome
+- [ ] Canadian Location Codes and marine
+- [ ] Connect to a node over TCP
+- [ ] Live audio to text transcription for forwarding instructions sent after the SAME header
+
+# 📇 Contact
+If you need assistance deploying an alerter feel free to contact me
+- Discord: RCGV_
+- Email: Benjaminfaer@gmail.com
+

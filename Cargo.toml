@@ -16,3 +16,7 @@ strum = { version = "0.26.2", features = ["derive", "strum_macros"] }
 ascii = "1.1.0"
 clap = { version = "4.5.5", features = ["derive"] }
 atty = "0.2.14"
+rust-embed = "8.4.0"
+serde = { version = "1.0.203", features = ["derive"] }
+csv = "1.3.0"
+simple_logger = "5.0.0"
