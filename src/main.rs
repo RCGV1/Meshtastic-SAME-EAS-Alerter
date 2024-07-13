@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
 
     // Handle alertChannel argument
     if let Some(alert_channel_arg) = args.alert_channel {
-        if alert_channel_arg > 7 || alert_channel_arg < 0 {
+        if !(0..=7).contains(&alert_channel_arg) {
             // https://meshtastic.org/docs/configuration/radio/channels/
             return Err(anyhow::anyhow!("alertChannel must be between 0 and 7"));
         } else {
@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
 
     // Handle testChannel argument
     if let Some(test_channel_arg) = args.test_channel {
-        if test_channel_arg > 7 || test_channel_arg < 0 {
+        if !(0..=7).contains(&test_channel_arg) {
             // https://meshtastic.org/docs/configuration/radio/channels/
             return Err(anyhow::anyhow!("testChannel must be between 0 and 7"));
         } else {
@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
         let mut inbuf = Box::new(io::BufReader::new(stdin_handle));
 
         // Create an iterator for audio source from stdin, reading i16 and converting to f32
-        let audiosrc = std::iter::from_fn(|| Some(inbuf.read_i16::<NativeEndian>().ok()?));
+        let audiosrc = std::iter::from_fn(|| inbuf.read_i16::<NativeEndian>().ok());
 
         log::info!("Monitoring for alerts");
         log::info!("Alerts will be sent to channel: {}", alert_channel);
@@ -203,14 +203,11 @@ async fn main() -> Result<()> {
                         SignificanceLevel::Unknown => {
                             message = "🚨".to_string() + &evt.to_string() + &*message;
                         }
-                        _ => {
-                            message = "🚨".to_string() + &evt.to_string() + &*message;
-                        }
                     }
                     let codes: Vec<String> =
                         hdr.location_str_iter().map(|s| s.to_string()).collect();
                     if hdr.is_national() {
-                        message = message + " Nationwide Alert"
+                        message += " Nationwide Alert"
                     } else {
                         let mut locations_found = Vec::new();
 
@@ -237,7 +234,7 @@ async fn main() -> Result<()> {
                                     _ => {}
                                 }
 
-                                location.push_str(&county);
+                                location.push_str(county);
                                 locations_found.push(location);
                             } else {
                                 log::debug!("Location Code: {} not found", code);
