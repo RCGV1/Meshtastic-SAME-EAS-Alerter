@@ -56,11 +56,15 @@ fn search_by_code<'a>(
 
 #[derive(Parser, Debug)]
 #[command(long_about = None)]
-#[command(group(ArgGroup::new("operation").required(true).args(&["port", "ports"])))]
+#[command(group(ArgGroup::new("operation").required(true).args(&["port", "ports", "host"])))]
 struct Args {
-    /// Port of Meshtastic device to connect to
+    /// Serial port of device to connect to
     #[arg(long, short)]
     port: Option<String>,
+
+    /// Network address with port of device to connect to
+    #[arg(long)]
+    host: Option<String>,
 
     /// Flag to print all open ports, use it to find the correct port
     #[arg(long)]
@@ -121,158 +125,165 @@ async fn main() -> Result<()> {
         }
     }
 
-    if let Some(port) = args.port {
-        let stream_api = StreamApi::new();
+    let unconnected_stream_api = StreamApi::new();
+    let stream_api = if let Some(port) = args.port {
+        let stream = utils::stream::build_serial_stream(port.clone(), None, None, None)?;
+        let (_decoded_listener, stream_api) = unconnected_stream_api.connect(stream).await;
+        log::info!("Connected to device via serial port on {:?}", port);
+        stream_api
+    } else if let Some(host) = args.host {
+        let stream = utils::stream::build_tcp_stream(host.clone()).await?;
+        let (_decoded_listener, stream_api) = unconnected_stream_api.connect(stream).await;
+        log::info!("Connected to device via TCP on {:?}", host);
+        stream_api
+    } else {
+        unreachable!();
+    };
 
-        let serial_stream = utils::stream::build_serial_stream(port.clone(), None, None, None)?;
-        let (_decoded_listener, stream_api) = stream_api.connect(serial_stream).await;
-        log::info!("Connected to port: {}", port);
+    let config_id = utils::generate_rand_id();
+    let mut packet_router = MyPacketRouter::new(0);
+    let mut meshtastic_stream = stream_api.configure(config_id).await?;
 
-        let config_id = utils::generate_rand_id();
-        let mut packet_router = MyPacketRouter::new(0);
-        let mut meshtastic_stream = stream_api.configure(config_id).await?;
+    // Create a SameReceiver with a 4800 Hz audio sampling rate
+    let mut rx = SameReceiverBuilder::new(48000)
+        .with_agc_gain_limits(1.0f32 / (i16::MAX as f32), 1.0 / 200.0)
+        .with_agc_bandwidth(0.05) // AGC bandwidth at symbol rate, < 1.0
+        .with_squelch_power(0.10, 0.05) // squelch open/close power, 0.0 < power < 1.0
+        .with_preamble_max_errors(2) // bit error limit when detecting sync sequence
+        .build();
 
-        // Create a SameReceiver with a 4800 Hz audio sampling rate
-        let mut rx = SameReceiverBuilder::new(48000)
-            .with_agc_gain_limits(1.0f32 / (i16::MAX as f32), 1.0 / 200.0)
-            .with_agc_bandwidth(0.05) // AGC bandwidth at symbol rate, < 1.0
-            .with_squelch_power(0.10, 0.05) // squelch open/close power, 0.0 < power < 1.0
-            .with_preamble_max_errors(2) // bit error limit when detecting sync sequence
-            .build();
+    // Set up stdin as the input source
+    let stdin = io::stdin();
+    // Check if there is any input from stdin
+    if atty::is(atty::Stream::Stdin) {
+        log::error!("Error: No input provided to stdin. Please provide RTL FM input.");
+        std::process::exit(1);
+    }
 
-        // Set up stdin as the input source
-        let stdin = io::stdin();
-        // Check if there is any input from stdin
-        if atty::is(atty::Stream::Stdin) {
-            log::error!("Error: No input provided to stdin. Please provide RTL FM input.");
-            std::process::exit(1);
-        }
+    let map = load_csv_into_hashmap().await;
+    log::info!("Loaded locations CSV");
 
-        let map = load_csv_into_hashmap().await;
-        log::info!("Loaded locations CSV");
+    let stdin_handle = stdin.lock();
+    let mut inbuf = Box::new(io::BufReader::new(stdin_handle));
 
-        let stdin_handle = stdin.lock();
-        let mut inbuf = Box::new(io::BufReader::new(stdin_handle));
+    // Create an iterator for audio source from stdin, reading i16 and converting to f32
+    let audiosrc = std::iter::from_fn(|| inbuf.read_i16::<NativeEndian>().ok());
 
-        // Create an iterator for audio source from stdin, reading i16 and converting to f32
-        let audiosrc = std::iter::from_fn(|| inbuf.read_i16::<NativeEndian>().ok());
+    log::info!("Monitoring for alerts");
+    log::info!("Alerts will be sent to channel: {}", alert_channel);
+    if test_channel == 10 {
+        log::info!("Tests alerts will be ignored (test-channel argument was not provided)")
+    } else {
+        log::info!("Test alerts will be sent to channel: {}", test_channel)
+    }
+    // Process messages from the audio source
+    for msg in rx.iter_messages(audiosrc.map(|sa| sa as f32)) {
+        match msg {
+            Message::StartOfMessage(hdr) => {
+                let evt = hdr.event();
+                log::info!("Begin SAME voice message: {:?}", hdr);
+                let mut message: String;
+                let mut channel: MeshChannel = alert_channel.into();
 
-        log::info!("Monitoring for alerts");
-        log::info!("Alerts will be sent to channel: {}", alert_channel);
-        if test_channel == 10 {
-            log::info!("Tests alerts will be ignored (test-channel argument was not provided)")
-        } else {
-            log::info!("Test alerts will be sent to channel: {}", test_channel)
-        }
-        // Process messages from the audio source
-        for msg in rx.iter_messages(audiosrc.map(|sa| sa as f32)) {
-            match msg {
-                Message::StartOfMessage(hdr) => {
-                    let evt = hdr.event();
-                    log::info!("Begin SAME voice message: {:?}", hdr);
-                    let mut message: String;
-                    let mut channel: MeshChannel = alert_channel.into();
-
-                    message = ", Issued By: ".to_string()
-                        + hdr.originator().get_detailed_message().unwrap();
-                    match evt.significance() {
-                        SignificanceLevel::Test => {
-                            if test_channel == 10 {
-                                log::info!("Ignoring test alert");
-                                continue;
-                            }
-                            message = "📖Received ".to_string()
-                                + &evt.to_string()
-                                + " from "
-                                + hdr.callsign()
-                                + &*message;
-                            channel = test_channel.into();
+                message = ", Issued By: ".to_string()
+                    + hdr.originator().get_detailed_message().unwrap();
+                match evt.significance() {
+                    SignificanceLevel::Test => {
+                        if test_channel == 10 {
+                            log::info!("Ignoring test alert");
+                            continue;
                         }
-                        SignificanceLevel::Statement => {
-                            message = "📟".to_string() + &evt.to_string() + &*message;
-                        }
-                        SignificanceLevel::Emergency => {
-                            message = "🚨".to_string() + &evt.to_string() + &*message;
-                        }
-                        SignificanceLevel::Watch => {
-                            message = "⚠️".to_string() + &evt.to_string() + &*message;
-                        }
-                        SignificanceLevel::Warning => {
-                            message = "🚨".to_string() + &evt.to_string() + &*message;
-                        }
-                        SignificanceLevel::Unknown => {
-                            message = "🚨".to_string() + &evt.to_string() + &*message;
-                        }
+                        message = "📖Received ".to_string()
+                            + &evt.to_string()
+                            + " from "
+                            + hdr.callsign()
+                            + &*message;
+                        channel = test_channel.into();
                     }
-                    let codes: Vec<String> =
-                        hdr.location_str_iter().map(|s| s.to_string()).collect();
-                    if hdr.is_national() {
-                        message += " Nationwide Alert"
-                    } else {
-                        let mut locations_found = Vec::new();
-
-                        // Pass each code into the function and collect the results
-                        for code in codes {
-                            if let Some((county, _state)) =
-                                search_by_code(&map, &format!("0{}", &code[1..]))
-                            {
-                                let mut location = String::new();
-
-                                // Determining where in the county the location is
-                                // https://www.weather.gov/nwr/sameenz
-                                match code.chars().next().unwrap_or_default() {
-                                    '0' => {}
-                                    '1' => location.push_str("Northwest "),
-                                    '2' => location.push_str("North "),
-                                    '3' => location.push_str("Northeast "),
-                                    '4' => location.push_str("West "),
-                                    '5' => location.push_str("Central "),
-                                    '6' => location.push_str("East "),
-                                    '7' => location.push_str("Southwest "),
-                                    '8' => location.push_str("South "),
-                                    '9' => location.push_str("Southeast "),
-                                    _ => {}
-                                }
-
-                                location.push_str(county);
-                                locations_found.push(location);
-                            } else {
-                                log::debug!("Location Code: {} not found", code);
-                            }
-                        }
-
-                        if !locations_found.is_empty() {
-                            if locations_found.len() == 1 {
-                                message.push_str(", Location: ");
-                            } else {
-                                message.push_str(", Locations: ");
-                            }
-                            message.push_str(&locations_found.join(", "));
-                        }
+                    SignificanceLevel::Statement => {
+                        message = "📟".to_string() + &evt.to_string() + &*message;
                     }
-
-                    if message.len() > 228 {
-                        log::debug!("Message string too long for Meshtastic, truncating");
-                        message.truncate(228);
+                    SignificanceLevel::Emergency => {
+                        message = "🚨".to_string() + &evt.to_string() + &*message;
                     }
-
-                    log::info!("Attempting to send message over the mesh: {}", message);
-
-                    // Attempt to send message over the mesh
-                    if let Err(e) = meshtastic_stream
-                        .send_text(&mut packet_router, message, Broadcast, true, channel)
-                        .await
-                    {
-                        log::error!("Error sending message: {}", e);
+                    SignificanceLevel::Watch => {
+                        message = "⚠️".to_string() + &evt.to_string() + &*message;
+                    }
+                    SignificanceLevel::Warning => {
+                        message = "🚨".to_string() + &evt.to_string() + &*message;
+                    }
+                    SignificanceLevel::Unknown => {
+                        message = "🚨".to_string() + &evt.to_string() + &*message;
                     }
                 }
-                Message::EndOfMessage => {
-                    log::info!("End SAME voice message");
+                let codes: Vec<String> =
+                    hdr.location_str_iter().map(|s| s.to_string()).collect();
+                if hdr.is_national() {
+                    message += " Nationwide Alert"
+                } else {
+                    let mut locations_found = Vec::new();
+
+                    // Pass each code into the function and collect the results
+                    for code in codes {
+                        if let Some((county, _state)) =
+                            search_by_code(&map, &format!("0{}", &code[1..]))
+                        {
+                            let mut location = String::new();
+
+                            // Determining where in the county the location is
+                            // https://www.weather.gov/nwr/sameenz
+                            match code.chars().next().unwrap_or_default() {
+                                '0' => {}
+                                '1' => location.push_str("Northwest "),
+                                '2' => location.push_str("North "),
+                                '3' => location.push_str("Northeast "),
+                                '4' => location.push_str("West "),
+                                '5' => location.push_str("Central "),
+                                '6' => location.push_str("East "),
+                                '7' => location.push_str("Southwest "),
+                                '8' => location.push_str("South "),
+                                '9' => location.push_str("Southeast "),
+                                _ => {}
+                            }
+
+                            location.push_str(county);
+                            locations_found.push(location);
+                        } else {
+                            log::debug!("Location Code: {} not found", code);
+                        }
+                    }
+
+                    if !locations_found.is_empty() {
+                        if locations_found.len() == 1 {
+                            message.push_str(", Location: ");
+                        } else {
+                            message.push_str(", Locations: ");
+                        }
+                        message.push_str(&locations_found.join(", "));
+                    }
+                }
+
+                if message.len() > 228 {
+                    log::debug!("Message string too long for Meshtastic, truncating");
+                    message.truncate(228);
+                }
+
+                log::info!("Attempting to send message over the mesh: {}", message);
+
+                // Attempt to send message over the mesh
+                if let Err(e) = meshtastic_stream
+                    .send_text(&mut packet_router, message, Broadcast, true, channel)
+                    .await
+                {
+                    log::error!("Error sending message: {}", e);
                 }
             }
+            Message::EndOfMessage => {
+                log::info!("End SAME voice message");
+            }
         }
-        log::warn!("Program stopped, no longer monitoring");
     }
+        log::warn!("Program stopped, no longer monitoring");
 
     Ok(())
 }
