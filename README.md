@@ -13,7 +13,7 @@
     <img src="https://github.com/meshtastic/design/blob/master/Meshtastic%20Powered%20Logo/M-POWERED.png?raw=true" width=100>
 </a>
 
-The Meshtastic SAME EAS Alerter is a lightweight tool designed to forward warnings, emergencies, or statements sent over the air to a local Meshtastic network. It operates without needing a WiFi connection. The setup involves connecting the hosting computer to an RTL SDR via USB and to a running Meshtastic node via serial.
+The Meshtastic SAME EAS Alerter is a lightweight tool designed to forward warnings, emergencies, or statements sent over the air to a local Meshtastic network. It operates without needing a WiFi connection. The setup involves connecting the hosting computer to an RTL SDR via USB and to a running Meshtastic node via serial or TCP.
 
 ![Flood Example](./images/Flood.jpg)
 
@@ -53,6 +53,12 @@ Other operating systems may have a different installation
 ```
 rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter
 ```
+> The frequency input is in Hz not MHz
+
+### help
+```
+Meshtastic-SAME-EAS-Alerter --help
+```
 
 ### ports
 - Find all available serial ports
@@ -66,14 +72,20 @@ Meshtastic-SAME-EAS-Alerter --ports
 Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE>
 ```
 
-## alert channel  
+### host
+- Enter the address of the TCP host to connect to, in the form of IP:PORT
+```
+Meshtastic-SAME-EAS-Alerter --host <TCP_HOST_HERE>
+```
+
+### alert channel  
 - Input the channel number that alerts will be sent to  
 - By default, (if nothing is provided) alerts will be sent to channel number 0  
 ```
 Meshtastic-SAME-EAS-Alerter --alert-channel <CHANNEL_NUMBER_HERE>
 ```
 
-## test channel  
+### test channel  
 - Input the channel number that test messages will be sent to  
   - Usually test messages are transmitted weekly from the weather service station  
   - These messages can help you tell if your system is working but they can be annoying as they happen often  
@@ -88,11 +100,16 @@ Meshtastic-SAME-EAS-Alerter --test-channel <CHANNEL_NUMBER_HERE>
 ````
 rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE> --alert-channel <CHANNEL_NUMBER_HERE> --test-channel <CHANNEL_NUMBER_HERE>
 ````
+or
+````
+rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter --host <TCP_HOST_HERE> --alert-channel <CHANNEL_NUMBER_HERE> --test-channel <CHANNEL_NUMBER_HERE>
+````
+> Remember to replace the placeholder values
 
 # 📓 TODO
 PRs are welcome
 - [ ] Canadian Location Codes and marine
-- [ ] Connect to a node over TCP
+- [x] Connect to a node over TCP
 - [ ] Live audio to text transcription for forwarding instructions sent after the SAME header
 
 # 📇 Contact

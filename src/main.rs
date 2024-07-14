@@ -62,7 +62,7 @@ struct Args {
     #[arg(long, short)]
     port: Option<String>,
 
-    /// Network address with port of device to connect to
+    /// Network address with port of device to connect to in the form of IP:PORT
     #[arg(long)]
     host: Option<String>,
 
