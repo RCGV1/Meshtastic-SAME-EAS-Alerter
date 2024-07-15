@@ -77,6 +77,10 @@ struct Args {
     /// Channel to which tests are sent to, if not provided tests will be ignored
     #[structopt(long, short)]
     test_channel: Option<u32>,
+
+    /// Sample rate.
+    #[arg(long, short, default_value_t=48000)]
+    rate: u32
 }
 
 #[tokio::main]
@@ -144,8 +148,8 @@ async fn main() -> Result<()> {
     let mut packet_router = MyPacketRouter::new(0);
     let mut meshtastic_stream = stream_api.configure(config_id).await?;
 
-    // Create a SameReceiver with a 4800 Hz audio sampling rate
-    let mut rx = SameReceiverBuilder::new(48000)
+    // Create a SameReceiver.
+    let mut rx = SameReceiverBuilder::new(args.rate)
         .with_agc_gain_limits(1.0f32 / (i16::MAX as f32), 1.0 / 200.0)
         .with_agc_bandwidth(0.05) // AGC bandwidth at symbol rate, < 1.0
         .with_squelch_power(0.10, 0.05) // squelch open/close power, 0.0 < power < 1.0
