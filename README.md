@@ -37,12 +37,6 @@ sudo apt-get install -f
 Other operating systems may have a different installation
 
 
-## 📻 Meshtastic Setup
-- All alerts will be sent to the primary channel (channel number 0)       
-- Set a secondary channel (channel 1) to be the logger channel, either by creating a different name for it or some sort of encryption   
-  - All test alerts will be sent to channel 1 so be sure to configure it   
-- The connected node should have a great line of sight of other nodes to effectively relay alerts  
-
 
 ## 🖋️ Usage
 
@@ -92,6 +86,14 @@ Meshtastic-SAME-EAS-Alerter --alert-channel <CHANNEL_NUMBER_HERE>
 - By default, (if nothing is provided) test messages will be ignored  
 ```
 Meshtastic-SAME-EAS-Alerter --test-channel <CHANNEL_NUMBER_HERE>
+```
+
+### sample rate
+- Input the sampling rate of the input
+- Do not modify this if you do not know what you are doing
+- Default is 48000
+```
+Meshtastic-SAME-EAS-Alerter --rate <SAMPLING_RATE_HERE>
 ```
 
 ### Full example
