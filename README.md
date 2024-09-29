@@ -58,6 +58,7 @@ Meshtastic-SAME-EAS-Alerter --help
 ```
 
 ### host
+Currently there is a issue with the reliability of TCP, please use a serial connection if possible
 - Enter the address of the TCP host to connect to, in the form of IP:PORT
 ```
 Meshtastic-SAME-EAS-Alerter --host <TCP_HOST_HERE>
