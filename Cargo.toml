@@ -8,7 +8,7 @@ sameold = "0.4"
 chrono = "0.4.38"
 byteorder = "1.5.0"
 anyhow = "1.0.86"
-tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.0.0", features = ["full"] }
 meshtastic = { git = "https://github.com/PeterGrace/meshtastic-rust", branch = "ble_feature_flag" }
 log = "0.4.21"
 thiserror = "1.0.61"

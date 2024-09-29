@@ -18,11 +18,13 @@ The Meshtastic SAME EAS Alerter is a lightweight tool designed to forward warnin
 ![Flood Example](./images/Flood.jpg)
 
 ## 💿 Installation
+# ATTENTION: For the newest version you must install the python CLI  
 Installation example for Raspbian
 1. Install rtl_fm.  
    follow these [instructions](https://fuzzthepiguy.tech/rtl_fm-install/)
-
-2. Install Meshtastic-SAME-EAS-Alerter
+2. Install the Meshtastic Python CLI  
+   Follow these [instructions](https://meshtastic.org/docs/software/python/cli/installation/)
+3. Install Meshtastic-SAME-EAS-Alerter
 ````
 # Download the updated .deb file
 wget https://github.com/RCGV1/Meshtastic-SAME-EAS-Alerter/releases/download/v<VERSION_NUMBER_HERE>/Meshtastic-SAME-EAS-Alerter_<VERSION_NUMBER_HERE>_arm64.deb
@@ -39,6 +41,7 @@ Other operating systems may have a different installation
 
 
 ## 🖋️ Usage
+### By default the alerter will find a connected node that is connected via serial or on local host
 
 ### RTL FM input
 - You must pass in the input from an rtl fm stream
@@ -52,18 +55,6 @@ rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter
 ### help
 ```
 Meshtastic-SAME-EAS-Alerter --help
-```
-
-### ports
-- Find all available serial ports
-- Find the port your Meshtastic node is connected to
-```
-Meshtastic-SAME-EAS-Alerter --ports
-```
-
-### port
-```
-Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE>
 ```
 
 ### host
@@ -99,8 +90,9 @@ Meshtastic-SAME-EAS-Alerter --rate <SAMPLING_RATE_HERE>
 ### Full example
 - You need both a Meshtastic serial port passed as an arg and rtl fm to run this
 - Alert channel and test channel are optional (see above)
+- By default (if host is not provided) the alerter will find a node that is connected via serial or on local host
 ````
-rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter --port <MESHTASTIC_PORT_HERE> --alert-channel <CHANNEL_NUMBER_HERE> --test-channel <CHANNEL_NUMBER_HERE>
+rtl_fm -f <FREQUENCY_IN_HZ_HERE> -s 48000 -r 48000 | Meshtastic-SAME-EAS-Alerter --alert-channel <CHANNEL_NUMBER_HERE> --test-channel <CHANNEL_NUMBER_HERE>
 ````
 or
 ````

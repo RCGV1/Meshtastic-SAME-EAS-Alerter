@@ -1,22 +1,19 @@
 use anyhow::Result;
 use byteorder::{NativeEndian, ReadBytesExt};
-use clap::{ArgGroup, Parser};
 use csv::ReaderBuilder;
 use log::LevelFilter;
-use meshtastic::api::StreamApi;
-use meshtastic::packet::PacketDestination::Broadcast;
-use meshtastic::packet::PacketRouter;
-use meshtastic::protobufs::{FromRadio, MeshPacket};
-use meshtastic::types::{MeshChannel, NodeId};
-use meshtastic::utils;
 use rust_embed::RustEmbed;
+use clap::Parser;
 use sameold::{Message, SameReceiverBuilder, SignificanceLevel};
 use serde::Deserialize;
 use simple_logger::SimpleLogger;
 use std::collections::HashMap;
+use std::env::args;
 use std::io::{self};
-use strum::{Display, EnumMessage};
-use thiserror::Error;
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
+use std::process::{Command, Stdio};
+use strum::EnumMessage;
 
 #[derive(RustEmbed)]
 #[folder = "src"]
@@ -27,6 +24,130 @@ struct Record {
     code: String,
     county: String,
     state: String,
+}
+
+struct MessageSender {
+    last_message_time: Option<Instant>,
+}
+
+impl MessageSender {
+    fn new() -> Self {
+        MessageSender {
+            last_message_time: None,
+        }
+    }
+
+    async fn send_message_with_retry(
+        &mut self,
+        chan: u32,
+        message: &str,
+        retries: u32,
+        delay: Duration,
+        args: Args,
+    ) -> Result<(), String> {
+        // Ensure at least 10 seconds between messages
+        if let Some(last_time) = self.last_message_time {
+            let elapsed = last_time.elapsed();
+            if elapsed < Duration::from_secs(10) {
+                sleep(Duration::from_secs(10) - elapsed).await;
+            }
+        }
+
+        for attempt in 0..=retries {
+            // Create a new Command instance
+            let mut command = Command::new("meshtastic");
+                command.arg("--ch-index");
+                command.arg(chan.to_string());
+                command.arg("--sendtext");
+                command.arg(message.to_string()); // Convert message to String to extend its lifetime
+
+            // Conditionally add the host argument if provided
+            if let Some(host) = &args.host {
+                command.arg("--host").arg(host);
+            }
+            
+
+            // Execute the command
+            let result = command.spawn();
+
+            match result {
+                Ok(_) => {
+                    self.last_message_time = Some(Instant::now());
+                    return Ok(());
+                }
+                Err(e) => {
+                    if attempt < retries {
+                        log::warn!("Error sending message: {}. Retrying in {:?}...", e, delay);
+                        sleep(delay).await;
+                    } else {
+                        log::error!("Error sending message after {} attempts: {}", retries, e);
+                        return Err(format!("Failed to send message: {}", e));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+
+
+}
+
+async fn check_node_connection(args: Args) -> Result<()> {
+    // Construct the command to run `meshtastic --info`
+    let mut cmd = Command::new("meshtastic");
+
+
+
+    // Conditionally add the "--host" argument if the host is provided
+    if let Some(host) = &args.host {
+        cmd.arg("--host");
+        cmd.arg(host);  // Add host argument here
+    }
+
+
+    // Add the --info argument
+    cmd.arg("--info");
+
+    // Ensure the command doesn't output to the console
+    cmd.stdout(Stdio::piped());
+
+    // Run the command and capture the output
+    let output = cmd.output();
+
+    match output {
+        Ok(output) => {
+            // Convert the stdout to a string (output is captured as bytes)
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Check if the output contains "Error"
+            if stdout.contains("Error") {
+                log::error!("Received error output: {}", stdout);
+                std::process::exit(1);
+            }
+
+
+            // Check the first line of the output
+            if let Some(first_line) = stdout.lines().next() {
+                if first_line == "Connected to radio" {
+                    log::info!("Successfully connected to the node.");
+                    return Ok(());
+                } else {
+                    log::error!("Failed to connect to the radio. First line: {}", first_line);
+                    std::process::exit(1);
+                }
+            } else {
+                log::error!("Output from meshtastic --info was empty.");
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            // Log error if the command failed to run
+            log::error!("Failed to execute meshtastic --info: {}", e);
+            std::process::exit(1);
+        }
+    }
+
 }
 
 async fn load_csv_into_hashmap() -> HashMap<String, (String, String)> {
@@ -47,6 +168,7 @@ async fn load_csv_into_hashmap() -> HashMap<String, (String, String)> {
     map
 }
 
+
 fn search_by_code<'a>(
     map: &'a HashMap<String, (String, String)>,
     code: &str,
@@ -56,31 +178,23 @@ fn search_by_code<'a>(
 
 #[derive(Parser, Debug)]
 #[command(long_about = None)]
-#[command(group(ArgGroup::new("operation").required(true).args(&["port", "ports", "host"])))]
 struct Args {
-    /// Serial port of device to connect to
-    #[arg(long, short)]
-    port: Option<String>,
-
-    /// Network address with port of device to connect to in the form of IP:PORT
-    #[arg(long)]
-    host: Option<String>,
-
-    /// Flag to print all open ports, use it to find the correct port
-    #[arg(long)]
-    ports: bool,
-
     /// Channel to which alerts are sent to, if not provided will default to channel 0
-    #[structopt(long, short)]
+    #[arg(long, short)]
     alert_channel: Option<u32>,
 
     /// Channel to which tests are sent to, if not provided tests will be ignored
-    #[structopt(long, short)]
+    #[arg(long, short)]
     test_channel: Option<u32>,
 
+    /// Network address with port of device to connect to in the form of target.address:port
+    #[arg(long)]
+    host: Option<String>,
+
     /// Sample rate.
-    #[arg(long, short, default_value_t=48000)]
-    rate: u32
+    #[arg(long, short, default_value_t = 48000)]
+    rate: u32,
+
 }
 
 #[tokio::main]
@@ -102,12 +216,6 @@ async fn main() -> Result<()> {
     // Parse the command line arguments
     let args = Args::parse();
 
-    // Check if the --ports flag is set
-    if args.ports {
-        let available_ports = utils::stream::available_serial_ports()?;
-        println!("Available ports: {:?}", available_ports);
-        return Ok(());
-    }
 
     // Handle alertChannel argument
     if let Some(alert_channel_arg) = args.alert_channel {
@@ -129,24 +237,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    let unconnected_stream_api = StreamApi::new();
-    let stream_api = if let Some(port) = args.port {
-        let stream = utils::stream::build_serial_stream(port.clone(), None, None, None)?;
-        let (_decoded_listener, stream_api) = unconnected_stream_api.connect(stream).await;
-        log::info!("Connected to device via serial port on {:?}", port);
-        stream_api
-    } else if let Some(host) = args.host {
-        let stream = utils::stream::build_tcp_stream(host.clone()).await?;
-        let (_decoded_listener, stream_api) = unconnected_stream_api.connect(stream).await;
-        log::info!("Connected to device via TCP on {:?}", host);
-        stream_api
-    } else {
-        unreachable!();
-    };
-
-    let config_id = utils::generate_rand_id();
-    let mut packet_router = MyPacketRouter::new(0);
-    let mut meshtastic_stream = stream_api.configure(config_id).await?;
+    check_node_connection(Args::parse()).await.expect("Failed to check node connection");
 
     // Create a SameReceiver.
     let mut rx = SameReceiverBuilder::new(args.rate)
@@ -173,6 +264,8 @@ async fn main() -> Result<()> {
     // Create an iterator for audio source from stdin, reading i16 and converting to f32
     let audiosrc = std::iter::from_fn(|| inbuf.read_i16::<NativeEndian>().ok());
 
+    let mut sender = MessageSender::new();
+
     log::info!("Monitoring for alerts");
     log::info!("Alerts will be sent to channel: {}", alert_channel);
     if test_channel == 10 {
@@ -180,6 +273,7 @@ async fn main() -> Result<()> {
     } else {
         log::info!("Test alerts will be sent to channel: {}", test_channel)
     }
+
     // Process messages from the audio source
     for msg in rx.iter_messages(audiosrc.map(|sa| sa as f32)) {
         match msg {
@@ -187,12 +281,13 @@ async fn main() -> Result<()> {
                 let evt = hdr.event();
                 log::info!("Begin SAME voice message: {:?}", hdr);
                 let mut message: String;
-                let mut channel: MeshChannel = alert_channel.into();
+                let mut send_channel: u32 = alert_channel;
 
                 message = ", Issued By: ".to_string()
                     + hdr.originator().get_detailed_message().unwrap();
                 match evt.significance() {
                     SignificanceLevel::Test => {
+                        send_channel = test_channel;
                         if test_channel == 10 {
                             log::info!("Ignoring test alert");
                             continue;
@@ -202,7 +297,6 @@ async fn main() -> Result<()> {
                             + " from "
                             + hdr.callsign()
                             + &*message;
-                        channel = test_channel.into();
                     }
                     SignificanceLevel::Statement => {
                         message = "📟".to_string() + &evt.to_string() + &*message;
@@ -267,19 +361,31 @@ async fn main() -> Result<()> {
                     }
                 }
 
-                if message.len() > 228 {
-                    log::debug!("Message string too long for Meshtastic, truncating");
-                    message.truncate(228);
-                }
-
                 log::info!("Attempting to send message over the mesh: {}", message);
 
-                // Attempt to send message over the mesh
-                if let Err(e) = meshtastic_stream
-                    .send_text(&mut packet_router, message, Broadcast, true, channel)
-                    .await
-                {
-                    log::error!("Error sending message: {}", e);
+                // Split and send the message in chunks of 75 characters, using retry logic
+                let mut myvec: Vec<usize> = message.bytes().enumerate().filter(|(_,c)| *c == b' ').map(|(i,_)| i).collect::<Vec<_>>();
+                let mut curpos: usize = 0;
+                let mut curlen: usize = 0;
+                let mut startpos: usize = 0;
+                for i in myvec.iter_mut() {
+                    if curlen + *i - curpos > 75 {
+                        sender
+                            .send_message_with_retry(send_channel, &message[startpos..(startpos + curlen)], 3, Duration::from_secs(5), Args::parse())
+                            .await;
+                        curpos = startpos + curlen;
+                        startpos += curlen;
+                        curlen = 0;
+                    } else {
+                        curlen += *i - curpos;
+                        curpos = *i;
+                    }
+                }
+                curlen = message.len() - startpos;
+                if curlen != 0 {
+                    sender
+                        .send_message_with_retry(send_channel, &message[startpos..(startpos + curlen)], 3, Duration::from_secs(5), Args::parse())
+                        .await.expect("TODO: panic message");
                 }
             }
             Message::EndOfMessage => {
@@ -287,51 +393,8 @@ async fn main() -> Result<()> {
             }
         }
     }
-        log::warn!("Program stopped, no longer monitoring");
+
+    log::warn!("Program stopped, no longer monitoring");
 
     Ok(())
-}
-
-#[allow(unused)]
-#[derive(Display, Clone, Error, Debug)]
-pub enum DeviceUpdateError {
-    PacketNotSupported(String),
-    RadioMessageNotSupported(String),
-    DecodeFailure(String),
-    GeneralFailure(String),
-    EventDispatchFailure(String),
-    NotificationDispatchFailure(String),
-}
-#[allow(unused)]
-#[derive(Default)]
-struct MyPacketRouter {
-    _source_node_id: NodeId,
-}
-
-impl MyPacketRouter {
-    fn new(node_id: u32) -> Self {
-        MyPacketRouter {
-            _source_node_id: node_id.into(),
-        }
-    }
-}
-#[allow(unused)]
-impl PacketRouter<(), DeviceUpdateError> for MyPacketRouter {
-    fn handle_packet_from_radio(
-        &mut self,
-        _packet: FromRadio,
-    ) -> std::result::Result<(), DeviceUpdateError> {
-        Ok(())
-    }
-
-    fn handle_mesh_packet(
-        &mut self,
-        _packet: MeshPacket,
-    ) -> std::result::Result<(), DeviceUpdateError> {
-        Ok(())
-    }
-
-    fn source_node_id(&self) -> NodeId {
-        self._source_node_id
-    }
 }
