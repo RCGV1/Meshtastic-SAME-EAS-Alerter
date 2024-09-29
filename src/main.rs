@@ -372,7 +372,7 @@ async fn main() -> Result<()> {
                     if curlen + *i - curpos > 75 {
                         sender
                             .send_message_with_retry(send_channel, &message[startpos..(startpos + curlen)], 3, Duration::from_secs(5), Args::parse())
-                            .await;
+                            .await.expect("Failed sending msg");;
                         curpos = startpos + curlen;
                         startpos += curlen;
                         curlen = 0;
@@ -385,7 +385,7 @@ async fn main() -> Result<()> {
                 if curlen != 0 {
                     sender
                         .send_message_with_retry(send_channel, &message[startpos..(startpos + curlen)], 3, Duration::from_secs(5), Args::parse())
-                        .await.expect("TODO: panic message");
+                        .await.expect("Failed sending msg");
                 }
             }
             Message::EndOfMessage => {
