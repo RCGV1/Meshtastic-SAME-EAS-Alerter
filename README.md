@@ -17,6 +17,12 @@ The Meshtastic SAME EAS Alerter is a lightweight tool designed to forward warnin
 
 ![Flood Example](./images/Flood.jpg)
 
+## Legal
+This project is neither endorsed by nor supported by Meshtastic.
+
+Meshtastic® is a registered trademark of Meshtastic LLC. Meshtastic software components are released under various licenses, see GitHub for details. No warranty is provided - use at your own risk.
+
+
 ## 💿 Installation
 # ATTENTION: For the newest version you must install the python CLI  
 Installation example for Raspbian
