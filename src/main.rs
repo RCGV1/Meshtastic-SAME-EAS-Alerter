@@ -1,7 +1,7 @@
 use anyhow::Result;
 use byteorder::{NativeEndian, ReadBytesExt};
 use csv::ReaderBuilder;
-use log::LevelFilter;
+use log::{info, LevelFilter, log};
 use rust_embed::RustEmbed;
 use clap::Parser;
 use sameold::{Message, SameReceiverBuilder, SignificanceLevel};
@@ -195,6 +195,10 @@ struct Args {
     #[arg(long, short, default_value_t = 48000)]
     rate: u32,
 
+    /// Location codes that must be present to send an alert
+    #[arg(long, short, value_delimiter = ',', default_value = "")]
+    locations: Vec<String>,
+
 }
 
 #[tokio::main]
@@ -319,6 +323,14 @@ async fn main() -> Result<()> {
                 if hdr.is_national() {
                     message += " Nationwide Alert"
                 } else {
+                    if !args.locations.is_empty() && !codes.is_empty() {
+                        let has_match = codes.iter().any(|code| args.locations.contains(code));
+                        if !has_match {
+                            log::info!("Ignoring alert with no matching locations in filter");
+                            continue;
+                        }
+                    }
+
                     let mut locations_found = Vec::new();
 
                     // Pass each code into the function and collect the results
@@ -372,7 +384,7 @@ async fn main() -> Result<()> {
                     if curlen + *i - curpos > 75 {
                         sender
                             .send_message_with_retry(send_channel, &message[startpos..(startpos + curlen)], 3, Duration::from_secs(5), Args::parse())
-                            .await.expect("Failed sending msg");;
+                            .await.expect("Failed sending msg");
                         curpos = startpos + curlen;
                         startpos += curlen;
                         curlen = 0;

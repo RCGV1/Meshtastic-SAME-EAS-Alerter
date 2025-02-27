@@ -88,6 +88,21 @@ Meshtastic-SAME-EAS-Alerter --test-channel <CHANNEL_NUMBER_HERE>
 Meshtastic-SAME-EAS-Alerter --rate <SAMPLING_RATE_HERE>
 ```
 
+### locations
+- Input the location codes of counties you want to filter for
+- If a alert does not contain the counties you are filtering for it will be ignored
+- By default if this arg is not provided all alerts will be sent of all locations (Most likley your local NWS will only alert of nearby alerts)
+- National alerts override this
+- Look in [sameCodes](src/sameCodes.csv) to find the county codes to use
+```
+Meshtastic-SAME-EAS-Alerter --locations <LOCATIONS_HERE>
+```
+example:    
+```
+Meshtastic-SAME-EAS-Alerter --locations 006085,006087
+```
+
+
 ### Full example
 - You need both a Meshtastic serial port passed as an arg and rtl fm to run this
 - Alert channel and test channel are optional (see above)
