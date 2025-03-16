@@ -4,7 +4,7 @@ version = "0.6.0"
 edition = "2021"
 
 [dependencies]
-sameold = "0.4"
+sameold = "0.5.0"
 chrono = "0.4.38"
 byteorder = "1.5.0"
 anyhow = "1.0.86"

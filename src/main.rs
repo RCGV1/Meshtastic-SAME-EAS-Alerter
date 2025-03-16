@@ -196,7 +196,7 @@ struct Args {
     rate: u32,
 
     /// Location codes that must be present to send an alert
-    #[arg(long, short, value_delimiter = ',', default_value = "")]
+    #[arg(long, short, value_delimiter = ',', default_value = None, required = false)]
     locations: Vec<String>,
 
 }
@@ -318,17 +318,30 @@ async fn main() -> Result<()> {
                         message = "🚨".to_string() + &evt.to_string() + &*message;
                     }
                 }
-                let codes: Vec<String> =
-                    hdr.location_str_iter().map(|s| s.to_string()).collect();
+                let codes: Vec<String> = hdr.location_str_iter().map(|s| s.to_string()).collect();
+
                 if hdr.is_national() {
                     message += " Nationwide Alert"
                 } else {
                     if !args.locations.is_empty() && !codes.is_empty() {
-                        let has_match = codes.iter().any(|code| args.locations.contains(code));
+                        // Log the values for debugging
+                        log::debug!("Provided locations: {:?}", args.locations);
+                        log::debug!("Alert locations: {:?}", codes);
+
+                        let has_match = codes.iter().any(|code| {
+                            let matches = args.locations.contains(code);
+                            log::debug!("Comparing alert code '{}' with provided locations: {}", code, matches);
+                            matches
+                        });
+
                         if !has_match {
                             log::info!("Ignoring alert with no matching locations in filter");
                             continue;
+                        } else {
+                            log::info!("Alert has matching locations, proceeding to send");
                         }
+                    } else {
+                        log::info!("No location filter applied (locations empty) or no locations in alert");
                     }
 
                     let mut locations_found = Vec::new();
