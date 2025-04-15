@@ -45,11 +45,11 @@ impl MessageSender {
         delay: Duration,
         args: Args,
     ) -> Result<(), String> {
-        // Ensure at least 10 seconds between messages
+        // Ensure at least 20 seconds between messages
         if let Some(last_time) = self.last_message_time {
             let elapsed = last_time.elapsed();
-            if elapsed < Duration::from_secs(10) {
-                sleep(Duration::from_secs(10) - elapsed).await;
+            if elapsed < Duration::from_secs(20) {
+                sleep(Duration::from_secs(20) - elapsed).await;
             }
         }
 
@@ -60,6 +60,7 @@ impl MessageSender {
                 command.arg(chan.to_string());
                 command.arg("--sendtext");
                 command.arg(message.to_string()); // Convert message to String to extend its lifetime
+                command.arg("--ack");
 
             // Conditionally add the host argument if provided
             if let Some(host) = &args.host {
