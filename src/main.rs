@@ -106,6 +106,12 @@ async fn check_node_connection(args: Args) -> Result<()> {
         cmd.arg(host);  // Add host argument here
     }
 
+    // Conditionally add the "--port" argument if the serial port is provided ie. /dev/ttyUSB0
+    if let Some(port) = &args.port {
+        cmd.arg("--port");
+        cmd.arg(port);  // Add port argument here
+    }
+
 
     // Add the --info argument
     cmd.arg("--info");
