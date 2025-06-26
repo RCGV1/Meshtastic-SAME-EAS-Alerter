@@ -67,7 +67,7 @@ impl MessageSender {
                 command.arg("--host").arg(host);
             }
             
-            // Conditionally add the host argument if provided
+            // Conditionally add the port argument if provided
             if let Some(port) = &args.port {
                 command.arg("--port").arg(port);
             }
