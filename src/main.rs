@@ -67,6 +67,10 @@ impl MessageSender {
                 command.arg("--host").arg(host);
             }
             
+            // Conditionally add the port argument if provided
+            if let Some(port) = &args.port {
+                command.arg("--port").arg(port);
+            }
 
             // Execute the command
             let result = command.spawn();
@@ -104,6 +108,12 @@ async fn check_node_connection(args: Args) -> Result<()> {
     if let Some(host) = &args.host {
         cmd.arg("--host");
         cmd.arg(host);  // Add host argument here
+    }
+
+    // Conditionally add the "--port" argument if the serial port is provided ie. /dev/ttyUSB0
+    if let Some(port) = &args.port {
+        cmd.arg("--port");
+        cmd.arg(port);  // Add port argument here
     }
 
 
@@ -191,6 +201,10 @@ struct Args {
     /// Network address with port of device to connect to in the form of target.address:port
     #[arg(long)]
     host: Option<String>,
+
+    /// The port of the device to connect to using serial, e.g. /dev/ttyUSB0. (defaults to trying to detect a port)
+    #[arg(long)]
+    port: Option<String>,
 
     /// Sample rate.
     #[arg(long, short, default_value_t = 48000)]
