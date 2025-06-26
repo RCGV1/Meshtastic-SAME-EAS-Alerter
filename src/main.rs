@@ -202,6 +202,10 @@ struct Args {
     #[arg(long)]
     host: Option<String>,
 
+    /// The port of the device to connect to using serial, e.g. /dev/ttyUSB0. (defaults to trying to detect a port)
+    #[arg(long)]
+    port: Option<String>,
+
     /// Sample rate.
     #[arg(long, short, default_value_t = 48000)]
     rate: u32,
