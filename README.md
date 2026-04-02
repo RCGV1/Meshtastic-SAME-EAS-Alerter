@@ -93,6 +93,16 @@ Meshtastic-SAME-EAS-Alerter --test-channel <CHANNEL_NUMBER_HERE>
 Meshtastic-SAME-EAS-Alerter --rate <SAMPLING_RATE_HERE>
 ```
 
+### msg chars
+- Specify the number of characters to split the alerts into. 
+- Alerts are sent as multiple messages each `msg_chars` length or less.
+- Must be between 75 and 200
+- Default is  75
+
+```
+Meshtastic-SAME-EAS-Alerter --msg-chars 150
+```
+
 ### locations
 - Input the location codes of counties you want to filter for
 - If a alert does not contain the counties you are filtering for it will be ignored

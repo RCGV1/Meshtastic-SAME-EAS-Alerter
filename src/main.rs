@@ -200,6 +200,10 @@ struct Args {
     #[arg(long, short)]
     test_channel: Option<u32>,
 
+    /// Number of characters to split messages into
+    #[arg(long, short)]
+    msg_chars: Option<usize>,
+
     /// Network address with port of device to connect to in the form of target.address:port
     #[arg(long)]
     host: Option<String>,
@@ -234,6 +238,9 @@ async fn main() -> Result<()> {
     // 10 means that tests will not be logged
     let mut test_channel: u32 = 10;
 
+    // Default value of message_chars
+    let mut msg_chars: usize = 75;
+
     // Parse the command line arguments
     let args = Args::parse();
 
@@ -255,6 +262,15 @@ async fn main() -> Result<()> {
             return Err(anyhow::anyhow!("testChannel must be between 0 and 7"));
         } else {
             test_channel = test_channel_arg;
+        }
+    }
+
+    if let Some(msg_chars_arg) = args.msg_chars {
+        if msg_chars_arg < 75 || msg_chars_arg > 200 {
+            return Err(anyhow::anyhow!("Message characters must be between 75 and 200"));
+        }
+        else {
+            msg_chars = msg_chars_arg
         }
     }
 
@@ -405,13 +421,13 @@ async fn main() -> Result<()> {
 
                 log::info!("Attempting to send message over the mesh: {}", message);
 
-                // Split and send the message in chunks of 75 characters, using retry logic
+                // Split and send the message in chunks of msg_chars characters, using retry logic
                 let mut myvec: Vec<usize> = message.bytes().enumerate().filter(|(_,c)| *c == b' ').map(|(i,_)| i).collect::<Vec<_>>();
                 let mut curpos: usize = 0;
                 let mut curlen: usize = 0;
                 let mut startpos: usize = 0;
                 for i in myvec.iter_mut() {
-                    if curlen + *i - curpos > 75 {
+                    if curlen + *i - curpos > msg_chars {
                         sender
                             .send_message_with_retry(send_channel, &message[startpos..(startpos + curlen)], 3, Duration::from_secs(5), Args::parse())
                             .await.expect("Failed sending msg");
